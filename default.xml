@@ -14,7 +14,7 @@
   <project remote="freescale" revision="dunfell" name="meta-freescale-distro" path="sources/meta-freescale-distro"/>
 
   <project remote="oe" revision="dunfell" name="meta-openembedded" path="sources/meta-openembedded"/>
-  <project remote="oe" revision="dunfell" name="meta-openembedded" path="sources/meta-openembedded"/>
+  <project remote="oe" revision="dunfell" name="meta-python2" path="sources/meta-python2"/>
 
   <project remote="scottw514" revision="master" name="meta-glowforge-gpl" path="sources/meta-glowforge-gpl">
     <copyfile dest="base/conf/bblayers.conf" src="base/conf/meta-glowforge-gpl-bblayers.conf"/>
