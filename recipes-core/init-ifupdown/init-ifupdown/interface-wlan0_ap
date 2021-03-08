@@ -1,0 +1,4 @@
+iface wlan0_ap inet static
+      pre-up /sbin/ip link set dev wlan0_ap address `/usr/bin/gen_ap_mac.py`
+      address 192.168.192.1
+      netmask 255.255.255.0

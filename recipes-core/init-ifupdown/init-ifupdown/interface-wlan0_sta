@@ -1,0 +1,4 @@
+iface wlan0_sta inet dhcp
+      wireless_mode managed
+      wpa-driver nl80211
+      wpa-conf /data/etc/wpa_supplicant.conf

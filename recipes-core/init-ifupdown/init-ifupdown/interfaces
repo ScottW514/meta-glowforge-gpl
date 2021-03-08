@@ -1,3 +1,6 @@
 auto lo
 iface lo inet loopback
 
+source /etc/network/interface-wlan0_sta
+source /etc/network/interface-wlan0_ap
+source /etc/network/interface-wlan0_sta-auto

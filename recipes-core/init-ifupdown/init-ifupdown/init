@@ -12,12 +12,12 @@
 
 PATH="/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
 
-[ -x /sbin/ifup -a /usr/bin/create_virtual_if.sh ] || exit 0
+[ -x /sbin/ifup -a /factory/img1/usr/bin/create_virtual_if.sh ] || exit 0
 
 case "$1" in
 start)
 	echo -n "Creating network interfaces... "
-	/usr/bin/create_virtual_if.sh phy0 wlan0
+	/factory/img1/usr/bin/create_virtual_if.sh phy0 wlan0
 	echo "done."
 	echo -n "Configuring network interfaces... "
 	ifup -a
@@ -45,4 +45,3 @@ force-reload|restart)
 esac
 
 exit 0
-

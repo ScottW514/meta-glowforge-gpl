@@ -1,0 +1,75 @@
+#!/bin/sh
+#/etc/init.d/glowforge-compat: start glowforge-compat
+
+### BEGIN INIT INFO
+# Provides:          glowforge-compat
+# Short-Description: Link to Glowforge factory libraries
+# Default-Start:     1 2 3 4 5
+# Default-Stop:
+### END INIT INFO
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+version () {
+  grep -e DISTRO_VERSION $1 | awk '{printf $3}' | awk -F. '{ printf("%d%03d%03d\n", $1,$2,$3); }'
+}
+
+exit_handler () {
+  if [ $? -ne 0 ]
+  then
+    # error, set LEDs to red
+    echo 100 > /sys/class/leds/button_led_1/target || true
+    echo 0 > /sys/class/leds/button_led_2/target || true
+    echo 0 > /sys/class/leds/button_led_3/target || true
+  fi
+}
+
+trap exit_handler EXIT
+
+img1=$(version '/factory/img1/etc/build')
+img2=$(version '/factory/img2/etc/build')
+compat_ver=$(cat '/etc/glowforge-compat.version')
+factory_ver=$img1
+basepath='/factory/img1'
+
+if [ $img2 -gt $img1 ]
+then
+  $factory_ver=$img2
+  $basepath='/factory/img2'
+fi
+
+if [ $factory_ver -gt $compat_ver ]
+then
+  echo 'Making image compatible with Glowforge Factory image'
+
+  if [ -e /data/etc/uEnv.txt ]
+  then
+    cp /data/etc/uEnv.txt /etc/uEnv.txt
+  fi
+
+  while read target; do
+    rm -f $target
+    ln -sf $basepath$target $target
+  done < /etc/glowforge-compat.list
+
+  ln -sf /etc/init.d/runit /etc/rc0.d/K50runit
+  ln -sf /etc/init.d/factory-reset /etc/rc0.d/S39factory-reset
+  ln -sf /etc/init.d/runit /etc/rc1.d/K50runit
+  ln -sf /etc/init.d/runit /etc/rc2.d/S50runit
+  ln -sf /etc/init.d/head-update /etc/rc2.d/S01head-update
+  ln -sf /etc/init.d/runit /etc/rc3.d/S50runit
+  ln -sf /etc/init.d/head-update /etc/rc3.d/S01head-update
+  ln -sf /etc/init.d/runit /etc/rc4.d/S50runit
+  ln -sf /etc/init.d/head-update /etc/rc4.d/S01head-update
+  ln -sf /etc/init.d/runit /etc/rc5.d/S50runit
+  ln -sf /etc/init.d/head-update /etc/rc5.d/S01head-update
+  ln -sf /etc/init.d/runit /etc/rc6.d/K50runit
+  ln -sf /etc/init.d/factory-reset /etc/rc6.d/S39factory-reset
+
+  touch /etc/update.lock
+
+  echo $factory_ver > /etc/glowforge-compat.version
+  reboot
+fi
+
+exit 0

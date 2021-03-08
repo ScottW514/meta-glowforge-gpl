@@ -8,4 +8,4 @@
 # Short-Description: Set hostname based on machine serial number
 ### END INIT INFO
 
-hostname `/usr/bin/machine_hostname || cat /etc/hostname || echo localhost`
+hostname `/factory/img1/usr/bin/machine_hostname || cat /etc/hostname || echo localhost`

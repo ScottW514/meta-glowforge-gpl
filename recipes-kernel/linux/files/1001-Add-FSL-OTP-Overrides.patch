@@ -1,0 +1,144 @@
+From 6991ce76ec333d8879da516c3590d2302cfb5b4c Mon Sep 17 00:00:00 2001
+From: Scott Wiederhold <s.e.wiederhold@gmail.com>
+Date: Sun, 7 Mar 2021 14:52:40 -0500
+Subject: [PATCH] Add FSL OTP Overrides
+
+This adds the ability to override the serial number and password stored in
+the one-time-programmable memory on the Glowforge control board.
+Overrides are applied to both the /sys/fsl_otp interface and to any mmap
+operations on the OTP's hardware addresses via /dev/mem.
+
+The following two kernel boot arguments are added:
+
+ fsl_otp.mac0 -> Desired new serial number
+ fsl_otp.srk  -> Desired new password (Must be exactly 64 hex characters)
+
+---
+ drivers/char/fsl_otp.c | 50 ++++++++++++++++++++++++++++++++++--------
+ drivers/char/mem.c     |  5 +++++
+ 2 files changed, 46 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/char/fsl_otp.c b/drivers/char/fsl_otp.c
+index face297d2487..24a6176f8997 100644
+--- a/drivers/char/fsl_otp.c
++++ b/drivers/char/fsl_otp.c
+@@ -24,11 +24,13 @@
+ #include <linux/init.h>
+ #include <linux/io.h>
+ #include <linux/kobject.h>
++#include <linux/mm.h>
+ #include <linux/module.h>
+ #include <linux/mutex.h>
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
+ #include <linux/slab.h>
++#include <linux/string.h>
+ #include <linux/sysfs.h>
+ 
+ #define HW_OCOTP_CTRL			0x00000000
+@@ -87,6 +89,13 @@ struct kobject *otp_kobj;
+ struct kobj_attribute *otp_kattr;
+ struct attribute_group *otp_attr_group;
+ 
++static unsigned int mac0 = 0;
++static char *srk = "";
++module_param(mac0, uint, 0);
++module_param(srk, charp, 0);
++unsigned long fsl_otp_pgoff = 0;
++EXPORT_SYMBOL(fsl_otp_pgoff);
++
+ static void set_otp_timing(void)
+ {
+ 	unsigned long clk_rate = 0;
+@@ -125,16 +134,14 @@ static int otp_wait_busy(u32 flags)
+ 	return 0;
+ }
+ 
+-static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
+-			    char *buf)
++static u32 fsl_otp_read(unsigned int index)
+ {
+-	unsigned int index = attr - otp_kattr;
+ 	u32 value = 0;
+ 	int ret;
+ 
+ 	ret = clk_prepare_enable(otp_clk);
+ 	if (ret)
+-		return 0;
++		goto out;
+ 
+ 	mutex_lock(&otp_mutex);
+ 
+@@ -143,12 +150,25 @@ static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
+ 	if (ret)
+ 		goto out;
+ 
+-	value = __raw_readl(otp_base + HW_OCOTP_CUST_N(index));
++	if (index == 34 && mac0 > 0) {
++		value = (u32)mac0;
++	} else if (index >= 24 && index <= 31 && strlen(srk) == 64) {
++		char buf[] = "00000000";
++		strncpy(buf, srk + ((index - 24) * 8), 8);
++		kstrtou32(buf, 16, &value);
++	} else {
++		value = __raw_readl(otp_base + HW_OCOTP_CUST_N(index));
++	}
++	out:
++		mutex_unlock(&otp_mutex);
++		clk_disable_unprepare(otp_clk);
++		return value;
++}
+ 
+-out:
+-	mutex_unlock(&otp_mutex);
+-	clk_disable_unprepare(otp_clk);
+-	return ret ? 0 : sprintf(buf, "0x%x\n", value);
++static ssize_t fsl_otp_show(struct kobject *kobj, struct kobj_attribute *attr,
++			    char *buf)
++{
++	return sprintf(buf, "0x%x\n", fsl_otp_read(attr - otp_kattr));
+ }
+ 
+ static int otp_write_bits(int addr, u32 data, u32 magic)
+@@ -266,6 +286,18 @@ static int fsl_otp_probe(struct platform_device *pdev)
+ 
+ 	mutex_init(&otp_mutex);
+ 
++	if (mac0 > 0 || strlen(srk) == 64) {
++		struct page *shadow_page = alloc_pages(GFP_KERNEL, 0);
++		fsl_otp_pgoff = page_to_phys(shadow_page) >> PAGE_SHIFT;
++		u64 * shadow = page_address(shadow_page);
++
++		unsigned int x;
++		for(x = 0x0; x < 0x27; x++) {
++			if ((x > 0x0F && x < 0x18) || (x > 0x23 && x < 0x25)) continue;
++			shadow[(x + 64) * 2] = fsl_otp_read(x);
++		}
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/char/mem.c b/drivers/char/mem.c
+index 43dd0891ca1e..6a4ee27e7dc1 100644
+--- a/drivers/char/mem.c
++++ b/drivers/char/mem.c
+@@ -38,6 +38,8 @@
+ 
+ #define DEVPORT_MINOR	4
+ 
++extern unsigned long fsl_otp_pgoff;
++
+ static inline unsigned long size_inside_page(unsigned long start,
+ 					     unsigned long size)
+ {
+@@ -368,6 +370,9 @@ static const struct vm_operations_struct mmap_mem_ops = {
+ 
+ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
+ {
++	if (vma->vm_pgoff == 0x21bc && fsl_otp_pgoff > 0) // 4QGF
++			vma->vm_pgoff = fsl_otp_pgoff;
++
+ 	size_t size = vma->vm_end - vma->vm_start;
+ 	phys_addr_t offset = (phys_addr_t)vma->vm_pgoff << PAGE_SHIFT;
+ 

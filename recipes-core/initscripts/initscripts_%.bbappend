@@ -1,7 +1,5 @@
 FILESEXTRAPATHS_append := "${THISDIR}/${PN}"
 
-RDEPENDS_${PN} = "glowforge-system-utils"
-
 # Remove save-rtc.sh since /etc is readonly and we rely on NTP for
 # the correct time anyway.
 do_install_append() {
